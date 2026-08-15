@@ -6,19 +6,29 @@ from sklearn.metrics import mean_squared_error, r2_score
 import matplotlib.pyplot as plt
 
 # ---------- 1. Pick & explore ----------
-df = pd.read_csv("House_price.csv")
+df = pd.read_csv("Fish.csv")
 print("Shape:", df.shape)
 print("\nMissing values per column:\n", df.isnull().sum())
 print("\nDuplicate rows:", df.duplicated().sum())
+print("\nSpecies counts:\n", df["Species"].value_counts())
 print("\nSummary stats:\n", df.describe())
 
-# Quick correlation with target — helps sanity-check signs later
-print("\nCorrelation with Price:\n", df.corr(numeric_only=True)["Price"].sort_values(ascending=False))
+# Data-quality check: a fish can't weigh 0 grams -> this is a bad row, not a
+# real outlier, so we drop it rather than let it distort the fit.
+bad_rows = df[df["Weight"] <= 0]
+print(f"\nRows with Weight <= 0 (dropped): {len(bad_rows)}")
+df = df[df["Weight"] > 0].reset_index(drop=True)
+print("Shape after cleaning:", df.shape)
+
+print("\nCorrelation with Weight (numeric feats):\n",
+      df.corr(numeric_only=True)["Weight"].sort_values(ascending=False))
 
 # ---------- 2. Prepare & split ----------
-feats = ["Avg. Area Income", "House Age", "Number of Rooms",
-          "Number of Bedrooms", "Area Population"]
-X, y = df[feats], df["Price"]
+# Species is categorical -> one-hot encode it so the model can use it
+df_enc = pd.get_dummies(df, columns=["Species"], drop_first=True)
+
+feats = [c for c in df_enc.columns if c != "Weight"]
+X, y = df_enc[feats], df_enc["Weight"]
 
 Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.25, random_state=1)
 
@@ -36,17 +46,17 @@ print(f"R2  : {r2:.4f}")
 
 print("\n--- Coefficients ---")
 for f, c in zip(feats, model.coef_):
-    print(f"{f:>22}: {c:>12,.2f}")
-print(f"{'Intercept':>22}: {model.intercept_:>12,.2f}")
+    print(f"{f:>20}: {c:>12,.2f}")
+print(f"{'Intercept':>20}: {model.intercept_:>12,.2f}")
 
 # Predicted-vs-actual plot
 plt.figure(figsize=(6, 6))
-plt.scatter(yte, pred, alpha=0.5, edgecolor="k", linewidth=0.3)
+plt.scatter(yte, pred, alpha=0.6, edgecolor="k", linewidth=0.3)
 lims = [min(yte.min(), pred.min()), max(yte.max(), pred.max())]
 plt.plot(lims, lims, "r--", label="perfect prediction")
-plt.xlabel("Actual Price")
-plt.ylabel("Predicted Price")
-plt.title(f"Predicted vs Actual (Test set)\nR2={r2:.3f}, RMSE={rmse:,.0f}")
+plt.xlabel("Actual Weight (g)")
+plt.ylabel("Predicted Weight (g)")
+plt.title(f"Predicted vs Actual (Test set)\nR2={r2:.3f}, RMSE={rmse:,.1f}")
 plt.legend()
 plt.tight_layout()
 plt.savefig("predicted_vs_actual.png", dpi=150)
